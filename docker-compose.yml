@@ -1,18 +1,42 @@
 version: '3'
+
+networks:
+  chain1:
+  chain2:
+
 services:
-  netstats:
-    container_name: netstats
+  netstats1:
+    container_name: netstats1
+    hostname: netstats
     build: ./eth-netstats
     environment:
       - TZ=`ls -la /etc/localtime | cut -d/ -f8-9
       - WS_SECRET=eth-net-stats-secret
     restart: on-failure
-  miner:
-    container_name: miner
+    networks:
+      - chain1
+    ports:
+      - '0.0.0.0:13000:3000'
+
+  netstats2:
+    container_name: netstats2
+    hostname: netstats
+    build: ./eth-netstats
+    environment:
+      - TZ=`ls -la /etc/localtime | cut -d/ -f8-9
+      - WS_SECRET=eth-net-stats-secret
+    restart: on-failure
+    networks:
+      - chain2
+    ports:
+      - '0.0.0.0:23000:3000'
+
+  miner1:
+    container_name: miner1
     hostname: miner
     build: ./monitored-geth-client
     depends_on:
-      - netstats
+      - netstats1
     environment:
       - TZ=`ls -la /etc/localtime | cut -d/ -f8-9
     entrypoint: /root/start.sh
@@ -22,17 +46,36 @@ services:
       --rpc --rpcaddr="0.0.0.0" --rpccorsdomain="*" --rpcapi "db,eth,net,web3"
       --nodekeyhex=091bd6067cb4612df85d9c1ff85cc47f259ced4d4cd99816b14f35650f59c322'
     restart: on-failure
-  publicnode:
-    container_name: publicnode
+    networks:
+      - chain1
+
+  miner2:
+    container_name: miner2
+    hostname: miner
+    build: ./monitored-geth-client
+    depends_on:
+      - netstats2
+    environment:
+      - TZ=`ls -la /etc/localtime | cut -d/ -f8-9
+    entrypoint: /root/start.sh
+    command: '--datadir=~/.ethereum/devchain --networkid=654322
+      --mine --targetgaslimit="9000000000000"
+      --unlock="007ccffb7916f37f7aeef05e8096ecfbe55afc2f" --password="/root/files/password.txt"
+      --rpc --rpcaddr="0.0.0.0" --rpccorsdomain="*" --rpcapi "db,eth,net,web3"
+      --nodekeyhex=091bd6067cb4612df85d9c1ff85cc47f259ced4d4cd99816b14f35650f59c322'
+    restart: on-failure
+    networks:
+      - chain2
+
+  publicnode1:
+    container_name: publicnode1
     hostname: publicnode
     build: ./monitored-geth-client
     depends_on:
-      - miner
-      - netstats
+      - miner1
+      - netstats1
     ports:
-      - '30303:30303'
-      - '8545:8545'
-      - '8546:8546'
+      - '0.0.0.0:18545-18546:8545-8546'
     environment:
       - TZ=`ls -la /etc/localtime | cut -d/ -f8-9
     entrypoint: /root/start.sh
@@ -41,19 +84,68 @@ services:
       --rpc --rpcaddr="0.0.0.0" --rpccorsdomain="*" --rpcapi "db,eth,net,web3"
       --bootnodes="enode://288b97262895b1c7ec61cf314c2e2004407d0a5dc77566877aad1f2a36659c8b698f4b56fd06c4a0c0bf007b4cfb3e7122d907da3b005fa90e724441902eb19e@XXX:30303"'
     restart: on-failure
-  nginx:
-    build:
-      context: ./nginx/prod
-    container_name: nginx
-    volumes:
-      - /etc/ssl:/etc/ssl
-      - /etc/letsencrypt:/etc/letsencrypt
-      - /data/letsencrypt:/data/letsencrypt
+    networks:
+      - chain1
+
+  publicnode2:
+    container_name: publicnode2
+    hostname: publicnode
+    build: ./monitored-geth-client
     depends_on:
-      - netstats
-      - publicnode
-      - miner
+      - miner2
+      - netstats2
     ports:
-      - '80:80'
-      - '443:443'
-      - '3000:3000'
+      - '0.0.0.0:28545-28546:8545-8546'
+    environment:
+      - TZ=`ls -la /etc/localtime | cut -d/ -f8-9
+    entrypoint: /root/start.sh
+    command: '--datadir=~/.ethereum/devchain --networkid=654322
+      --ws --wsaddr="0.0.0.0" --wsorigins="*"
+      --rpc --rpcaddr="0.0.0.0" --rpccorsdomain="*" --rpcapi "db,eth,net,web3"
+      --bootnodes="enode://288b97262895b1c7ec61cf314c2e2004407d0a5dc77566877aad1f2a36659c8b698f4b56fd06c4a0c0bf007b4cfb3e7122d907da3b005fa90e724441902eb19e@XXX:30303"'
+    restart: on-failure
+    networks:
+      - chain2
+
+     #nginx1:
+     #  build:
+     #    context: ./nginx/dev
+     #  container_name: nginx1
+     #  volumes:
+     #    - /:/etc/ssl
+     #    - /:/etc/letsencrypt
+     #    - /:/data/letsencrypt
+     #      #- /etc/ssl:/etc/ssl
+     #      #- /etc/letsencrypt:/etc/letsencrypt
+     #      #- /data/letsencrypt:/data/letsencrypt
+     #  depends_on:
+     #    - netstats1
+     #    - publicnode1
+     #    - miner1
+     #  ports:
+     #    - '0.0.0.0:80:80'
+     #    - '0.0.0.0:443:443'
+     #    - '0.0.0.0:3000:3000'
+     #  networks:
+     #    - chain1
+     #nginx2:
+     #  build:
+     #    context: ./nginx/dev
+     #  container_name: nginx2
+     #  volumes:
+     #    - /:/etc/ssl
+     #    - /:/etc/letsencrypt
+     #    - /:/data/letsencrypt
+     #      #- /etc/ssl:/etc/ssl
+     #      #- /etc/letsencrypt:/etc/letsencrypt
+     #      #- /data/letsencrypt:/data/letsencrypt
+     #  depends_on:
+     #    - netstats2
+     #    - publicnode2
+     #    - miner2
+     #  ports:
+     #    - '0.0.0.0:10080:80'
+     #    - '0.0.0.0:10443:443'
+     #    - '0.0.0.0:13000:3000'
+     #  networks:
+     #    - chain2
